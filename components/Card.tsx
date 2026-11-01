@@ -4,13 +4,35 @@ import { useEffect, useRef, useState } from "react";
 import { toPng } from "html-to-image";
 import type { Card, CardType } from "@/lib/types";
 
-// Per-type presentation: the label line + the divider glyph. (No separate type
-// badge — the label already names the type.)
-const TYPE_META: Record<CardType, { label: string; glyph: string }> = {
-  wish: { label: "A Diwali Wish ✨", glyph: "🪔" },
+// Per-type presentation. `reveal` (when present) describes the tap-to-reveal
+// twist: the button label, the heading on the revealed box, and whether it is
+// gated behind a 10s think-timer (riddles only).
+type RevealCfg = { button: string; heading: string; timer?: boolean };
+
+const TYPE_META: Record<
+  CardType,
+  { label: string; glyph: string; reveal?: RevealCfg }
+> = {
+  promise: {
+    label: "A Diwali Promise 🤝",
+    glyph: "🤝",
+    reveal: { button: "Seal it 🤝", heading: "Sealed" },
+  },
+  riddle: {
+    label: "Riddle Time 🧩",
+    glyph: "🧩",
+    reveal: { button: "Reveal answer 🔮", heading: "Answer", timer: true },
+  },
+  fortune: {
+    label: "Your Diwali Fortune 🔮",
+    glyph: "🔮",
+    reveal: { button: "Reveal fortune 🔮", heading: "Fortune" },
+  },
   task: { label: "Your Fun Task 🎯", glyph: "🎯" },
-  riddle: { label: "Riddle Time 🧩", glyph: "🧩" },
   dare: { label: "Playful Dare 🎭", glyph: "🎭" },
+  appreciation: { label: "Diwali Appreciation 💛", glyph: "💛" },
+  excuse: { label: "Diwali Excuse 😅", glyph: "😅" },
+  "this-or-that": { label: "This or That ⚔️", glyph: "⚔️" },
 };
 
 export default function CardView({
@@ -20,19 +42,22 @@ export default function CardView({
   card: Card;
   serial: number;
 }) {
+  const meta = TYPE_META[card.type];
+  // A reveal is shown only when the type supports it AND there's content.
+  const revealCfg = card.reveal ? meta.reveal : undefined;
+  const timed = !!revealCfg?.timer;
+
   // Ref points at the card node. The download control lives inside it, so we
   // filter the control out of the exported PNG (see toPng filter below).
   const cardRef = useRef<HTMLDivElement>(null);
   const [revealed, setRevealed] = useState(false);
   const [downloading, setDownloading] = useState(false);
-  // Riddles lock the answer for 10s so people actually think first.
-  const [countdown, setCountdown] = useState(card.type === "riddle" ? 10 : 0);
+  // Only timed reveals (riddles) lock the button for 10s so people think first.
+  const [countdown, setCountdown] = useState(timed ? 10 : 0);
 
-  const meta = TYPE_META[card.type];
-
-  // Tick the reveal lock down to zero (riddles only).
+  // Tick the reveal lock down to zero (timed reveals only).
   useEffect(() => {
-    if (card.type !== "riddle") return;
+    if (!timed) return;
     const id = setInterval(() => {
       setCountdown((c) => {
         if (c <= 1) {
@@ -43,7 +68,7 @@ export default function CardView({
       });
     }, 1000);
     return () => clearInterval(id);
-  }, [card.type]);
+  }, [timed]);
 
   async function handleDownload() {
     const node = cardRef.current;
@@ -113,8 +138,8 @@ export default function CardView({
             <span />
           </div>
 
-          {/* Only riddles ever surface an answer. */}
-          {card.type === "riddle" && card.answer && (
+          {/* Tap-to-reveal twist (riddle answer / promise cheer / fortune). */}
+          {revealCfg && (
             <>
               {!revealed ? (
                 <button
@@ -123,14 +148,12 @@ export default function CardView({
                   onClick={() => setRevealed(true)}
                   disabled={countdown > 0}
                 >
-                  {countdown > 0
-                    ? `Reveal in ${countdown}s`
-                    : "Reveal answer 🔮"}
+                  {countdown > 0 ? `Reveal in ${countdown}s` : revealCfg.button}
                 </button>
               ) : (
                 <div className="answer" role="status">
-                  <small>Answer</small>
-                  {card.answer}
+                  <small>{revealCfg.heading}</small>
+                  {card.reveal}
                 </div>
               )}
             </>
